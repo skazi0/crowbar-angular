@@ -2,6 +2,7 @@
 describe('Upgrade Status Factory', function () {
     var pollingInterval = 1234,
         testedStep = 'admin_upgrade',
+        allowedDowntime = 4321,
         completedUpgradeResponseData = {
             current_step: 'database',
             substep: null,
@@ -103,6 +104,7 @@ describe('Upgrade Status Factory', function () {
             data: incompleteUpgradeResponseData
         },
         flagsObject,
+        grabbedTimeoutCallback,
         mockedSuccessCallback,
         mockedErrorCallback,
         mockedRunningCallback,
@@ -121,10 +123,14 @@ describe('Upgrade Status Factory', function () {
         mockedCompletedCallback = jasmine.createSpy('onCompleted');
         mockedRunningCallback = jasmine.createSpy('onRunning');
 
+        // make sure grabbed callback was not carried over from previous runs
+        grabbedTimeoutCallback = undefined;
         // mock $timeout service
         module(function($provide) {
             $provide.factory('$timeout', function () {
-                mockedTimeout = jasmine.createSpy('$timeout');
+                mockedTimeout = jasmine.createSpy('$timeout').and.callFake(
+                    function (fn/*, delay, invokeApply, Pass*/) { grabbedTimeoutCallback = fn; }
+                );
                 return mockedTimeout;
             });
         });
@@ -186,7 +192,7 @@ describe('Upgrade Status Factory', function () {
                     flagsObject = { running: false, completed: true };
 
                     upgradeStatusFactory.syncStatusFlags(
-                        testedStep, flagsObject, mockedRunningCallback, mockedCompletedCallback
+                        testedStep, flagsObject, mockedRunningCallback, mockedCompletedCallback, allowedDowntime
                     );
 
                     $rootScope.$digest();
@@ -224,7 +230,7 @@ describe('Upgrade Status Factory', function () {
                         });
 
                         upgradeStatusFactory.waitForStepToEnd(
-                            testedStep, mockedSuccessCallback, mockedErrorCallback, pollingInterval
+                            testedStep, mockedSuccessCallback, mockedErrorCallback, pollingInterval, allowedDowntime
                         );
 
                         $rootScope.$digest();
@@ -239,6 +245,10 @@ describe('Upgrade Status Factory', function () {
                     it('should not schedule another check', function () {
                         expect(mockedTimeout).not.toHaveBeenCalled();
                     });
+                    // NOTE: this test is here just to ensure that our mocking is working correctly
+                    it('should not grab any callback function', function () {
+                        expect(grabbedTimeoutCallback).not.toBeDefined();
+                    });
                 });
 
                 describe('when received status is not completed', function () {
@@ -248,7 +258,7 @@ describe('Upgrade Status Factory', function () {
                         });
 
                         upgradeStatusFactory.waitForStepToEnd(
-                            testedStep, mockedSuccessCallback, mockedErrorCallback, pollingInterval
+                            testedStep, mockedSuccessCallback, mockedErrorCallback, pollingInterval, allowedDowntime
                         );
 
                         $rootScope.$digest();
@@ -264,6 +274,21 @@ describe('Upgrade Status Factory', function () {
                             jasmine.any(Function), pollingInterval
                         );
                     });
+                    // NOTE: this test is here just to ensure that our mocking is working correctly
+                    it('should grab the callback function', function () {
+                        expect(grabbedTimeoutCallback).toEqual(jasmine.any(Function));
+                    });
+                    it('executed callback should call waitForStepToEnd with original arguments', function () {
+                        // mock the function locally to enable expect
+                        spyOn(upgradeStatusFactory, 'waitForStepToEnd');
+
+                        // run the callback grabbed from mocked $timeout
+                        grabbedTimeoutCallback();
+
+                        expect(upgradeStatusFactory.waitForStepToEnd).toHaveBeenCalledWith(
+                            testedStep, mockedSuccessCallback, mockedErrorCallback, pollingInterval, allowedDowntime
+                        );
+                    });
                 });
             });
 
@@ -275,7 +300,7 @@ describe('Upgrade Status Factory', function () {
                         });
 
                         upgradeStatusFactory.waitForStepToEnd(
-                            testedStep, mockedSuccessCallback, mockedErrorCallback, pollingInterval
+                            testedStep, mockedSuccessCallback, mockedErrorCallback, pollingInterval, 0
                         );
 
                         $rootScope.$digest();
