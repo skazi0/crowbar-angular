@@ -1,7 +1,10 @@
 var express = require('express'),
     router = express.Router();
 
-var errors = ['001', '002', '003'],
+var errors = {
+        error_code1: { data: 'error1 data', help: 'error1 help' },
+        error_code2: { data: 'error2 data', help: 'error2 help' },
+    },
     checksPass = false,
     bestMethod = false;
 
@@ -14,10 +17,10 @@ router.get('/', function(req, res) {
         res.status(200).json({
             'checks': {
                 'maintenance_updates_installed': { required: true, passed: true },
-                'network_checks': { required: true, passed: checksPass },
-                'cloud_healthy': { required: true, passed: checksPass },
-                'clusters_healthy': { required: false, passed: false },
-                'ceph_healthy': { required: false, passed: checksPass },
+                'network_checks': { required: true, passed: checksPass, errors: checksPass ? {} : errors },
+                'cloud_healthy': { required: true, passed: checksPass, errors: checksPass ? {} : errors },
+                'clusters_healthy': { required: false, passed: true },
+                'ceph_healthy': { required: false, passed: checksPass, errors: checksPass ? {} : errors },
                 'compute_status': { required: true, passed: true }
             },
             'best_method': bestMethod ? 'non-disruptive' : 'disruptive'
